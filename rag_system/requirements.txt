@@ -1,0 +1,4 @@
+chonkie
+chromadb
+sentence-transformers
+openai # Add openai in case the user wants to use it
