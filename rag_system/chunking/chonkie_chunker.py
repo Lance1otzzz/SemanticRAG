@@ -1,52 +1,40 @@
-"""Simple text chunking utilities used by the RAG system.
-
-This module provides a small wrapper around the optional `chonkie` library.  If
-`chonkie` is available it will be used for chunking, otherwise a very basic
-paragraph based chunker is used.  Each produced chunk includes metadata about its
-position in the original text so that later retrieval steps can make use of the
-structure.
-"""
-
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 
-# Try to import the real chonkie library.  If it is not installed we fall back to
-# a minimal implementation so that the rest of the code can still run (e.g. in
-# tests on systems without the dependency).
 try:
-    from chonkie import Chonkie, DefaultChunker
-    from chonkie.types import Document as ChonkieDocument
+    from chonkie import RecursiveChunker
+    from chonkie.types import Chunk as ChonkieDocument
     CHONKIE_AVAILABLE = True
-except Exception:  # pragma: no cover - library is optional
+except ImportError:
     CHONKIE_AVAILABLE = False
+    # 创建一个简单的替代类，用于回退实现
+    class ChonkieDocument:
+        def __init__(self, content: str, metadata: Optional[Dict[str, Any]] = None):
+            self.content = content
+            self.metadata = metadata or {}
+            print('Chonkie is not imported.')
 
-    @dataclass
-    class ChonkieDocument:  # type: ignore
-        """Lightweight replacement used when `chonkie` isn't installed."""
-
-        content: str
-        metadata: Dict[str, Any]
-
-        # Some callers expect a ``tokens`` attribute from chonkie documents.
-        # It is left empty here.
-        tokens: List[str] | None = None
 
 
 class ChonkieTextChunker:
     """Utility for splitting text into chunks and capturing paragraph metadata."""
 
-    def __init__(self, chunker_name: str = "DefaultChunker", chunker_config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, chunker_name: str = "RecursiveChunker", chunker_config: Optional[Dict[str, Any]] = None) -> None:
         if chunker_config is None:
             chunker_config = {}
         self.chunker_name = chunker_name
         self.chunker_config = chunker_config
 
         if CHONKIE_AVAILABLE:
-            if chunker_name != "DefaultChunker":
+            if chunker_name != "RecursiveChunker":
                 raise ValueError(
-                    "Only 'DefaultChunker' is supported when using the chonkie backend."\
+                    f"Only 'RecursiveChunker' is supported when using the chonkie backend. Got {chunker_name}"
                 )
-            self.chunker = Chonkie(chunker=DefaultChunker(**chunker_config))
+            # 移除 chunk_overlap 参数，因为 RecursiveChunker 不接受该参数
+            chunker_params = chunker_config.copy()
+            if "chunk_overlap" in chunker_params:
+                chunker_params.pop("chunk_overlap")
+            self.chunker = RecursiveChunker(**chunker_params)
         else:
             # Parameters used by the simple fallback chunker
             self.chunk_size = int(chunker_config.get("chunk_size", 500))
@@ -83,12 +71,20 @@ class ChonkieTextChunker:
             return []
 
         if CHONKIE_AVAILABLE:
-            doc = ChonkieDocument(content=text, metadata=metadata or {})
-            chunks = self.chunker.chunk([doc])
-            for idx, chunk in enumerate(chunks):  # type: ignore[attr-defined]
-                chunk.metadata = chunk.metadata or {}
+            # 根据新的 API，直接调用 chunker 对象
+            chunks = self.chunker(text)
+            # 添加元数据
+            for idx, chunk in enumerate(chunks):
+                # 检查 chunk 对象是否有 metadata 属性，如果没有则添加
+                if not hasattr(chunk, 'metadata'):
+                    chunk.metadata = {}
+                else:
+                    chunk.metadata = chunk.metadata or {}
                 chunk.metadata.setdefault("chunk_index", idx)
-            return chunks  # type: ignore[return-value]
+                # 合并用户提供的元数据
+                if metadata:
+                    chunk.metadata.update(metadata)
+            return chunks
         else:
             return self._fallback_chunk(text, metadata)
 

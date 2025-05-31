@@ -2,9 +2,11 @@ import os
 import shutil # For cleaning up Chroma data if needed
 
 # Import the necessary classes from our modules
-from chunking.chonkie_chunker import ChonkieTextChunker, Document as ChonkieDocument # Assuming Document is the type from Chonkie
+from chunking.chonkie_chunker import ChonkieTextChunker, ChonkieDocument
+from chunking.chapter_aware_chunker import ChapterAwareChunker, convert_to_chonkie_documents
 from embedding.embedder import TextEmbedder
 from vector_store.chroma_db import ChromaDBManager
+from utils.config import OPENAI_API_KEY
 from typing import List # Required for type hinting
 
 # Configuration (can be moved to utils.config.py later)
@@ -15,11 +17,11 @@ SAMPLE_TEXT = (
     "ChromaDB is a vector database that stores these embeddings for efficient retrieval. "
     "The goal of a RAG system is to retrieve relevant information to augment LLM responses."
 )
-CHONKIE_CONFIG = {"chunk_size": 50, "chunk_overlap": 10} # Example, adjust as per Chonkie's DefaultChunker actual params
+CHONKIE_CONFIG = {"chunk_size": 800, "chunk_overlap": 100} # Example, adjust as per Chonkie's DefaultChunker actual params
 EMBEDDER_SERVICE = "sentence-transformers" # "openai" or "sentence-transformers"
 EMBEDDER_MODEL_ST = "all-MiniLM-L6-v2" # For sentence-transformers
 EMBEDDER_MODEL_OPENAI = "text-embedding-ada-002" # For OpenAI
-OPENAI_API_KEY = "YOUR_OPENAI_API_KEY_HERE" # Replace if using OpenAI
+USE_CHAPTER_AWARE_CHUNKING = True  # 是否使用章节感知分块
 
 CHROMA_PATH = "./rag_chroma_data_main"
 CHROMA_COLLECTION_NAME = "main_demo_collection"
@@ -36,22 +38,71 @@ def main():
     # 0. Optional: Cleanup previous Chroma data for a fresh start
     cleanup_chroma_data()
 
-    # 1. Initialize Chonkie Text Chunker
+    # 1. Initialize Text Chunker
     print("\n--- 1. Text Chunking ---")
     try:
-        # Note: Ensure Chonkie's DefaultChunker parameters are correctly named if different from chunk_size/overlap
-        chunker = ChonkieTextChunker(chunker_name="DefaultChunker", chunker_config=CHONKIE_CONFIG)
-        # The metadata for the initial document can be simple for this example
-        text_chunks_docs: List[ChonkieDocument] = chunker.chunk_text(SAMPLE_TEXT, metadata={"source": "sample_document_main"})
+        # 读取三国演义文本
+        text_file_path = "../三国演义.txt"
+        if not os.path.exists(text_file_path):
+            print(f"Error: 找不到文件 {text_file_path}")
+            print("使用示例文本进行演示...")
+            text_to_process = SAMPLE_TEXT
+        else:
+            with open(text_file_path, "r", encoding="utf-8") as f:
+                text_to_process = f.read()
+            print(f"成功加载三国演义文本，长度: {len(text_to_process)} 字符")
+        
+        if USE_CHAPTER_AWARE_CHUNKING:
+            print("使用章节感知分块器")
+            chapter_chunker = ChapterAwareChunker(
+                chunk_size=CHONKIE_CONFIG["chunk_size"], 
+                chunk_overlap=CHONKIE_CONFIG["chunk_overlap"],
+                respect_chapter_boundaries=True,
+                respect_paragraph_boundaries=True
+            )
+            
+            # 使用章节感知分块
+            chapter_chunks = chapter_chunker.chunk_text(text_to_process, metadata={"source": "三国演义"})
+            text_chunks_docs = convert_to_chonkie_documents(chapter_chunks)
+            
+            # 显示章节摘要
+            summary = chapter_chunker.get_chapter_summary(chapter_chunks)
+            print(f"章节感知分块结果:")
+            print(f"  检测到章节数: {summary['total_chapters']}")
+            print(f"  总分块数: {summary['total_chunks']}")
+            print(f"  平均分块大小: {summary['average_chunk_size']:.0f} 字符")
+            
+            # 显示前几个分块的详细信息
+            print("\n前3个分块信息:")
+            for i, (chunk_doc, chapter_chunk) in enumerate(zip(text_chunks_docs[:3], chapter_chunks[:3])):
+                print(f"\n分块 {i+1}:")
+                if chapter_chunk.chapter_number:
+                    print(f"  章节: 第{chapter_chunk.chapter_number}回 - {chapter_chunk.chapter_title}")
+                else:
+                    print(f"  章节: 序言部分")
+                print(f"  类型: {chapter_chunk.chunk_type}")
+                print(f"  长度: {len(chunk_doc.content)} 字符")
+                print(f"  内容预览: {chunk_doc.content[:100].replace(chr(10), ' ')}...")
+                print(f"  元数据: {chunk_doc.metadata}")
+        else:
+            print("使用传统Chonkie分块器")
+            chunker = ChonkieTextChunker(chunker_name="DefaultChunker", chunker_config=CHONKIE_CONFIG)
+            text_chunks_docs: List[ChonkieDocument] = chunker.chunk_text(text_to_process, metadata={"source": "三国演义"})
+            
+            print(f"传统分块结果: {len(text_chunks_docs)} 个分块")
+            for i, chunk_doc in enumerate(text_chunks_docs[:3]):
+                print(f"\n分块 {i+1}:")
+                print(f"  长度: {len(chunk_doc.content)} 字符")
+                print(f"  内容预览: {chunk_doc.content[:100]}...")
+                print(f"  元数据: {chunk_doc.metadata}")
         
         if not text_chunks_docs:
-            print("No chunks produced by Chonkie. Exiting.")
+            print("No chunks produced. Exiting.")
             return
 
         text_chunks_content: List[str] = [doc.content for doc in text_chunks_docs]
-        print(f"Successfully chunked text into {len(text_chunks_content)} chunks.")
-        for i, chunk_doc in enumerate(text_chunks_docs):
-            print(f"  Chunk {i+1}: '{chunk_doc.content}' (Metadata: {chunk_doc.metadata})")
+        print(f"\n成功分块，共 {len(text_chunks_content)} 个分块")
+        
     except Exception as e:
         print(f"Error during text chunking: {e}")
         return

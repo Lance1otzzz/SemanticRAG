@@ -17,6 +17,7 @@ import hashlib
 try:
     from sentence_transformers import SentenceTransformer  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
+    print("Warning: sentence-transformers not installed. Using hash embeddings for tests.")
     SentenceTransformer = None
 
 
