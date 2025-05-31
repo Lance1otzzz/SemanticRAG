@@ -1,99 +1,101 @@
-from chonkie import Chonkie, DefaultChunker
-from chonkie.types import Document  # Assuming Chonkie uses a Document type
-from typing import List, Optional, Dict, Any
+"""Simple text chunking utilities used by the RAG system.
 
-# You might need to import specific chunkers if not using DefaultChunker directly
-# from chonkie.chunkers import SomeSpecificChunker
+This module provides a small wrapper around the optional `chonkie` library.  If
+`chonkie` is available it will be used for chunking, otherwise a very basic
+paragraph based chunker is used.  Each produced chunk includes metadata about its
+position in the original text so that later retrieval steps can make use of the
+structure.
+"""
+
+from typing import List, Optional, Dict, Any
+from dataclasses import dataclass
+
+# Try to import the real chonkie library.  If it is not installed we fall back to
+# a minimal implementation so that the rest of the code can still run (e.g. in
+# tests on systems without the dependency).
+try:
+    from chonkie import Chonkie, DefaultChunker
+    from chonkie.types import Document as ChonkieDocument
+    CHONKIE_AVAILABLE = True
+except Exception:  # pragma: no cover - library is optional
+    CHONKIE_AVAILABLE = False
+
+    @dataclass
+    class ChonkieDocument:  # type: ignore
+        """Lightweight replacement used when `chonkie` isn't installed."""
+
+        content: str
+        metadata: Dict[str, Any]
+
+        # Some callers expect a ``tokens`` attribute from chonkie documents.
+        # It is left empty here.
+        tokens: List[str] | None = None
+
 
 class ChonkieTextChunker:
-    def __init__(self, chunker_name: str = "DefaultChunker", chunker_config: Optional[Dict[str, Any]] = None):
-        """
-        Initializes the ChonkieTextChunker.
+    """Utility for splitting text into chunks and capturing paragraph metadata."""
 
-        Args:
-            chunker_name (str): The name of the Chonkie chunker to use. 
-                                  Currently, only "DefaultChunker" is implemented as an example.
-                                  This can be expanded to select other Chonkie chunkers.
-            chunker_config (Optional[Dict[str, Any]]): Configuration dictionary for the chunker.
-                                                       Refer to Chonkie documentation for specific chunker parameters.
-        """
+    def __init__(self, chunker_name: str = "DefaultChunker", chunker_config: Optional[Dict[str, Any]] = None) -> None:
         if chunker_config is None:
             chunker_config = {}
+        self.chunker_name = chunker_name
+        self.chunker_config = chunker_config
 
-        # Placeholder for selecting different chunkers
-        # For now, we'll use DefaultChunker or allow passing a pre-configured Chonkie instance
-        if chunker_name == "DefaultChunker":
-            # Example: DefaultChunker might take parameters like chunk_size, chunk_overlap
-            # These would be passed in chunker_config, e.g., {"chunk_size": 1000, "chunk_overlap": 200}
-            # Adjust based on actual DefaultChunker or other Chonkie chunker parameters
+        if CHONKIE_AVAILABLE:
+            if chunker_name != "DefaultChunker":
+                raise ValueError(
+                    "Only 'DefaultChunker' is supported when using the chonkie backend."\
+                )
             self.chunker = Chonkie(chunker=DefaultChunker(**chunker_config))
-        # Example of how to add another chunker:
-        # elif chunker_name == "RecursiveCharacterTextSplitter": # Assuming Chonkie has this
-        #     from chonkie.text_splitters import RecursiveCharacterTextSplitter # Fictional import
-        #     self.chunker = Chonkie(chunker=RecursiveCharacterTextSplitter(**chunker_config))
         else:
-            raise ValueError(f"Unsupported chunker_name: {chunker_name}. Please use 'DefaultChunker' or extend this class.")
+            # Parameters used by the simple fallback chunker
+            self.chunk_size = int(chunker_config.get("chunk_size", 500))
+            self.chunk_overlap = int(chunker_config.get("chunk_overlap", 0))
 
-    def chunk_text(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> List[Document]:
-        """
-        Chunks the input text using the configured Chonkie chunker.
-
-        Args:
-            text (str): The text to be chunked.
-            metadata (Optional[Dict[str, Any]]): Optional metadata to associate with the created Document.
-
-        Returns:
-            List[Document]: A list of Chonkie Document objects representing the chunks.
-        """
+    def _fallback_chunk(self, text: str, metadata: Optional[Dict[str, Any]]) -> List[ChonkieDocument]:
+        """Fallback paragraph/size based chunking used if chonkie isn't installed."""
         if not text:
             return []
-            
-        # Chonkie's process method might take Document directly or text.
-        # Adjust based on Chonkie's API. Assuming it can take text and metadata for a Document.
-        # If Chonkie expects a Document object as input to process, create one first.
-        # For example:
-        # initial_document = Document(content=text, metadata=metadata if metadata else {})
-        # chunks = self.chunker.process([initial_document]) 
-        
-        # Simpler approach if Chonkie can directly chunk text string:
-        # This is a common pattern, but Chonkie's specific API might differ.
-        # The following is a conceptual representation.
-        # We might need to create a Document first, then chunk it.
-        
-        # According to Chonkie docs, it seems to operate on a list of Documents.
-        # So we create one initial document.
-        doc = Document(content=text, metadata=metadata if metadata else {})
-        
-        # The .chunk() method is available on Chonkie instances.
-        # It returns a list of Document objects.
-        chunked_documents = self.chunker.chunk([doc]) # Pass a list of documents
-        
-        return chunked_documents
+        # Identify paragraphs by double newlines
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        chunks: List[ChonkieDocument] = []
+        for p_idx, para in enumerate(paragraphs):
+            start = 0
+            while start < len(para):
+                end = min(start + self.chunk_size, len(para))
+                chunk_text = para[start:end]
+                meta = dict(metadata or {})
+                meta.update({
+                    "paragraph_index": p_idx,
+                    "start_offset": start,
+                    "end_offset": end,
+                })
+                chunks.append(ChonkieDocument(content=chunk_text, metadata=meta))
+                if self.chunk_overlap > 0 and end < len(para):
+                    start = end - self.chunk_overlap
+                else:
+                    start = end
+        return chunks
 
-# Example Usage (for testing within this file, can be removed or moved to main.py later):
-if __name__ == '__main__':
-    sample_text = (
-        "This is the first sentence. This is the second sentence, which is a bit longer. "
-        "Here comes the third sentence. The fourth sentence follows. And finally, the fifth sentence."
-    )
-    
-    # Using DefaultChunker with its default settings
-    try:
-        print("Testing with DefaultChunker (default config)...")
-        default_chunker_config = {"chunk_size": 50, "chunk_overlap": 10} # Example config
-        chunker_instance = ChonkieTextChunker(chunker_name="DefaultChunker", chunker_config=default_chunker_config)
-        chunks = chunker_instance.chunk_text(sample_text, metadata={"source": "test_document"})
-        
-        if chunks:
-            for i, chunk in enumerate(chunks):
-                print(f"--- Chunk {i+1} ---")
-                print(f"Content: {chunk.content}")
-                print(f"Metadata: {chunk.metadata}")
-                print(f"Tokens: {chunk.tokens}") # If Chonkie populates this
+    def chunk_text(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> List[ChonkieDocument]:
+        """Return a list of chunk documents with paragraph metadata."""
+        if not text:
+            return []
+
+        if CHONKIE_AVAILABLE:
+            doc = ChonkieDocument(content=text, metadata=metadata or {})
+            chunks = self.chunker.chunk([doc])
+            for idx, chunk in enumerate(chunks):  # type: ignore[attr-defined]
+                chunk.metadata = chunk.metadata or {}
+                chunk.metadata.setdefault("chunk_index", idx)
+            return chunks  # type: ignore[return-value]
         else:
-            print("No chunks were produced.")
+            return self._fallback_chunk(text, metadata)
 
-    except Exception as e:
-        print(f"An error occurred during testing: {e}")
-        print("Please ensure Chonkie is installed and the API usage is correct.")
-        print("Refer to Chonkie documentation for DefaultChunker parameters and usage.")
+
+# Example usage for manual testing
+if __name__ == "__main__":  # pragma: no cover
+    sample = """First paragraph.\n\nSecond paragraph that is quite a bit longer and will therefore be split """
+    chunker = ChonkieTextChunker(chunker_config={"chunk_size": 20, "chunk_overlap": 5})
+    for c in chunker.chunk_text(sample, metadata={"source": "test"}):
+        print(c)
