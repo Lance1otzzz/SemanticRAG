@@ -1,3 +1,30 @@
 mcp~=1.9.1
 numpy~=1.26.4
 magic-pdf[full]
+
+# Core dependencies
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+openai>=1.0.0
+
+# Optional dependencies for advanced chunking
+chonkie>=0.1.0
+
+# Metadata extraction dependencies
+# 主题建模
+bertopic>=0.15.0
+# 中文分词和关键词提取
+jieba>=0.42.1
+# 命名实体识别
+spacy>=3.4.0
+# 中文语言模型（需要单独下载）
+# python -m spacy download zh_core_web_sm
+
+# 机器学习相关
+scikit-learn>=1.0.0
+umap-learn>=0.5.0
+hdbscan>=0.8.0
+
+# Development and testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
