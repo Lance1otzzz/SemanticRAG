@@ -4,6 +4,7 @@
 # Replace "YOUR_OPENAI_API_KEY_HERE" with your actual OpenAI API key if you plan to use OpenAI embeddings.
 # Example: OPENAI_API_KEY = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 OPENAI_API_KEY = "YOUR_OPENAI_API_KEY_HERE"
+GOOGLE_API_KEY = "YOUR_GOOGLE_API_KEY_HERE"
 
 # Placeholder for API keys potentially used by ChromaDB's internal embedding functions
 # For example, if you use ChromaDB's OpenAIEmbeddingFunction directly via ChromaDBManager.

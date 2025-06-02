@@ -5,9 +5,11 @@ import shutil # For cleaning up Chroma data if needed
 from chunking.chonkie_chunker import ChonkieTextChunker, ChonkieDocument
 from chunking.chapter_aware_chunker import ChapterAwareChunker, convert_to_chonkie_documents
 from chunking.metadata_extractor import MetadataExtractor
+from chunking.llm_chunker import LLMChunker, Chunk
 from embedding.embedder import TextEmbedder
+from rag_system.chunking.llm_chunker import GeminiClient
 from vector_store.chroma_db import ChromaDBManager
-from utils.config import OPENAI_API_KEY
+from utils.config import OPENAI_API_KEY, GOOGLE_API_KEY
 from typing import List # Required for type hinting
 
 # Configuration (can be moved to utils.config.py later)
@@ -22,7 +24,7 @@ CHONKIE_CONFIG = {"chunk_size": 800, "chunk_overlap": 100} # Example, adjust as 
 EMBEDDER_SERVICE = "sentence-transformers" # "openai" or "sentence-transformers"
 EMBEDDER_MODEL_ST = "all-MiniLM-L6-v2" # For sentence-transformers
 EMBEDDER_MODEL_OPENAI = "text-embedding-ada-002" # For OpenAI
-USE_CHAPTER_AWARE_CHUNKING = True  # 是否使用章节感知分块
+CHUNKING_METHOD = "chapter-aware"  # Supported methods: chapter-aware, chonkie, llm
 
 CHROMA_PATH = "./rag_chroma_data_main"
 CHROMA_COLLECTION_NAME = "main_demo_collection"
@@ -53,7 +55,7 @@ def main():
                 text_to_process = f.read()
             print(f"成功加载三国演义文本，长度: {len(text_to_process)} 字符")
         
-        if USE_CHAPTER_AWARE_CHUNKING:
+        if CHUNKING_METHOD == "chapter-aware":
             print("使用章节感知分块器")
             chapter_chunker = ChapterAwareChunker(
                 chunk_size=CHONKIE_CONFIG["chunk_size"], 
@@ -114,10 +116,10 @@ def main():
                 print(f"  长度: {len(content)} 字符")
                 print(f"  内容预览: {content[:100].replace(chr(10), ' ')}...")
                 print(f"  元数据: {chunk_doc.metadata}")
-        else:
+        elif CHUNKING_METHOD == "chonkie":
             print("使用传统Chonkie分块器")
             chunker = ChonkieTextChunker(chunker_name="DefaultChunker", chunker_config=CHONKIE_CONFIG)
-            text_chunks_docs: List[ChonkieDocument] = chunker.chunk_text(text_to_process, metadata={"source": "三国演义"})
+            text_chunks_docs: List[ChonkieDocument | Chunk] = chunker.chunk_text(text_to_process, metadata={"source": "三国演义"})
             
             # 3. 元数据提取
             print("\n=== 元数据提取 ===")
@@ -153,6 +155,12 @@ def main():
                 print(f"  长度: {len(content)} 字符")
                 print(f"  内容预览: {content[:100]}...")
                 print(f"  元数据: {chunk_doc.metadata}")
+        elif CHUNKING_METHOD == "llm":
+            gemini_client = GeminiClient(GOOGLE_API_KEY)
+            llm_chunker = LLMChunker(gemini_client)
+            text_chunks_docs = llm_chunker.chunk(text_to_process)
+        else:
+            raise NotImplementedError("Not supported Chunking Method.")
         
         if not text_chunks_docs:
             print("No chunks produced. Exiting.")
