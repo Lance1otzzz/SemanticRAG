@@ -1,5 +1,5 @@
 import os
-import shutil # For cleaning up Chroma data if needed
+import shutil  # For cleaning up Chroma data if needed
 
 # Import the necessary classes from our modules
 from chunking.chonkie_chunker import ChonkieTextChunker, ChonkieDocument
@@ -10,7 +10,7 @@ from embedding.embedder import TextEmbedder
 from rag_system.chunking.llm_chunker import GeminiClient
 from vector_store.chroma_db import ChromaDBManager
 from utils.config import OPENAI_API_KEY, GOOGLE_API_KEY
-from typing import List # Required for type hinting
+from typing import List  # Required for type hinting
 
 # Configuration (can be moved to utils.config.py later)
 SAMPLE_TEXT = (
@@ -20,20 +20,22 @@ SAMPLE_TEXT = (
     "ChromaDB is a vector database that stores these embeddings for efficient retrieval. "
     "The goal of a RAG system is to retrieve relevant information to augment LLM responses."
 )
-CHONKIE_CONFIG = {"chunk_size": 800, "chunk_overlap": 100} # Example, adjust as per Chonkie's DefaultChunker actual params
-EMBEDDER_SERVICE = "sentence-transformers" # "openai" or "sentence-transformers"
-EMBEDDER_MODEL_ST = "all-MiniLM-L6-v2" # For sentence-transformers
-EMBEDDER_MODEL_OPENAI = "text-embedding-ada-002" # For OpenAI
+CHONKIE_CONFIG = {"chunk_size": 800, "chunk_overlap": 100}  # Example, adjust as per Chonkie's DefaultChunker actual params
+EMBEDDER_SERVICE = "sentence-transformers"  # "openai" or "sentence-transformers"
+EMBEDDER_MODEL_ST = "all-MiniLM-L6-v2"  # For sentence-transformers
+EMBEDDER_MODEL_OPENAI = "text-embedding-ada-002"  # For OpenAI
 CHUNKING_METHOD = "chapter-aware"  # Supported methods: chapter-aware, chonkie, llm
 
 CHROMA_PATH = "./rag_chroma_data_main"
 CHROMA_COLLECTION_NAME = "main_demo_collection"
+
 
 def cleanup_chroma_data(path: str = CHROMA_PATH):
     """Removes the ChromaDB data directory for a clean run."""
     if os.path.exists(path):
         print(f"Cleaning up old ChromaDB data at: {path}")
         shutil.rmtree(path)
+
 
 def main():
     print("--- Starting RAG System Demo ---")
