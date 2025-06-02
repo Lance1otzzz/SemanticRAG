@@ -3,7 +3,7 @@ import google.generativeai as genai
 
 class GeminiClient:
 
-    def __init__(self, api_key: str, model_name: str = "gemini-pro"):
+    def __init__(self, api_key: str, model_name: str = "gemini-2.5-pro-preview-05-06"):
         self.api_key = api_key
         self.model_name = model_name
         self.model = None

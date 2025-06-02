@@ -7,7 +7,7 @@ from chunking.chapter_aware_chunker import ChapterAwareChunker, convert_to_chonk
 from chunking.metadata_extractor import MetadataExtractor
 from chunking.llm_chunker import LLMChunker, Chunk
 from embedding.embedder import TextEmbedder
-from rag_system.chunking.llm_chunker import GeminiClient
+from chunking.llm_chunker import GeminiClient
 from vector_store.chroma_db import ChromaDBManager
 from utils.config import OPENAI_API_KEY, GOOGLE_API_KEY
 from typing import List  # Required for type hinting
@@ -47,13 +47,13 @@ def main():
     print("\n--- 1. Text Chunking ---")
     try:
         # 读取三国演义文本
-        text_file_path = "./三国演义.txt"
+        text_file_path = "./1-哈利波特与魔法石.txt"
         if not os.path.exists(text_file_path):
             print(f"Error: 找不到文件 {text_file_path}")
             print("使用示例文本进行演示...")
             text_to_process = SAMPLE_TEXT
         else:
-            with open(text_file_path, "r", encoding="utf-8") as f:
+            with open(text_file_path, "r", encoding="gbk") as f:
                 text_to_process = f.read()
             print(f"成功加载三国演义文本，长度: {len(text_to_process)} 字符")
         
@@ -85,7 +85,7 @@ def main():
             
             # 显示元数据提取结果
             print("\n元数据提取完成！")
-            for i, chunk in enumerate(enriched_chunks[:2]):  # 显示前2个章节的元数据
+            for i, chunk in enumerate(enriched_chunks[:20]):  # 显示前20个章节的元数据
                 print(f"\n=== 章节 {chunk.chapter_number} 元数据 ===")
                 print(f"主题关键词: {chunk.metadata.get('topics', [])}")
                 print(f"关键词: {chunk.metadata.get('keywords', [])[:5]}")
@@ -105,8 +105,8 @@ def main():
             print(f"  平均分块大小: {summary['average_chunk_size']:.0f} 字符")
             
             # 显示前几个分块的详细信息
-            print("\n前3个分块信息:")
-            for i, (chunk_doc, chapter_chunk) in enumerate(zip(text_chunks_docs[:3], enriched_chunks[:3])):
+            print("\n前30个分块信息:")
+            for i, (chunk_doc, chapter_chunk) in enumerate(zip(text_chunks_docs[:30], enriched_chunks[:30])):
                 print(f"\n分块 {i+1}:")
                 if chapter_chunk.chapter_number:
                     print(f"  章节: 第{chapter_chunk.chapter_number}回 - {chapter_chunk.chapter_title}")
@@ -256,7 +256,7 @@ def main():
 
     # 4. Perform a Retrieval Query
     print("\n--- 4. Retrieval Query ---")
-    query_text = "What is ChromaDB?"
+    query_text = "抢走魔法石"
     # query_text = "Tell me about the fox."
     print(f"Querying with: '{query_text}'")
 
